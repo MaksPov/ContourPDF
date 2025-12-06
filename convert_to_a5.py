@@ -24,18 +24,20 @@ MM_TO_POINTS = 2.83465
 A5_WIDTH_PT = A5_WIDTH_MM * MM_TO_POINTS
 A5_HEIGHT_PT = A5_HEIGHT_MM * MM_TO_POINTS
 
-def convert_pdf_to_a5(input_path, output_path, fit_mode='fit'):
+def convert_pdf_to_a5(input_path, output_path, fit_mode='fit', dpi=300):
     """
-    Конвертирует PDF в формат A5
+    Конвертирует PDF в формат A5 с высоким качеством
     
     Args:
         input_path: путь к входному PDF
         output_path: путь к выходному PDF
         fit_mode: режим подгонки ('fit' - вписать, 'fill' - заполнить, 'stretch' - растянуть)
+        dpi: разрешение для рендеринга (по умолчанию 300 DPI для печати)
     """
     print(f"Конвертация файла: {os.path.basename(input_path)}")
     print(f"Целевой формат: A5 ({A5_WIDTH_MM} x {A5_HEIGHT_MM} мм)")
     print(f"Режим подгонки: {fit_mode}")
+    print(f"Разрешение: {dpi} DPI")
     print()
     
     # Открываем PDF
@@ -47,6 +49,9 @@ def convert_pdf_to_a5(input_path, output_path, fit_mode='fit'):
     
     # Создаем новый PDF
     new_doc = fitz.open()
+    
+    # Вычисляем zoom для заданного DPI (72 DPI = 1.0 zoom)
+    zoom = dpi / 72.0
     
     for page_num in tqdm(range(total_pages), desc="Обработка страниц", ncols=80):
         page = doc[page_num]
@@ -68,40 +73,45 @@ def convert_pdf_to_a5(input_path, output_path, fit_mode='fit'):
             # Растянуть: используем разные масштабы для X и Y
             scale = None
         
-        # Вычисляем размеры для рендеринга (высокое разрешение для качества)
-        zoom = 2.0  # Увеличение для лучшего качества
-        render_width = int(original_width * zoom)
-        render_height = int(original_height * zoom)
-        
-        # Рендерим страницу в изображение
-        mat = fitz.Matrix(zoom, zoom)
-        pix = page.get_pixmap(matrix=mat)
-        img_data = pix.tobytes("png")
-        
-        # Открываем изображение через PIL
-        img_pil = Image.open(io.BytesIO(img_data))
-        
         # Вычисляем размеры для вставки в A5
         if scale is not None:
             # Единый масштаб для X и Y
-            new_width = int(img_pil.width * scale)
-            new_height = int(img_pil.height * scale)
-            img_resized = img_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            scaled_width = original_width * scale
+            scaled_height = original_height * scale
             
             # Центрируем содержимое
-            x_offset = (A5_WIDTH_PT - (new_width / zoom)) / 2
-            y_offset = (A5_HEIGHT_PT - (new_height / zoom)) / 2
+            x_offset = (A5_WIDTH_PT - scaled_width) / 2
+            y_offset = (A5_HEIGHT_PT - scaled_height) / 2
+            
+            target_width_pt = scaled_width
+            target_height_pt = scaled_height
         else:
             # Разные масштабы для X и Y (растяжение)
-            new_width = int(A5_WIDTH_PT * zoom)
-            new_height = int(A5_HEIGHT_PT * zoom)
-            img_resized = img_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
             x_offset = 0
             y_offset = 0
+            target_width_pt = A5_WIDTH_PT
+            target_height_pt = A5_HEIGHT_PT
         
-        # Конвертируем обратно в байты
+        # Рендерим страницу в изображение с высоким разрешением
+        # Рендерим оригинальную страницу с высоким разрешением
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Конвертируем в PIL Image для обработки
+        img_pil = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        
+        # Вычисляем размеры в пикселях для финального изображения
+        # Нужно масштабировать от оригинального размера (в пикселях) до целевого размера (в пикселях)
+        target_width_px = int(target_width_pt * zoom)
+        target_height_px = int(target_height_pt * zoom)
+        
+        # Масштабируем изображение до финального размера с высоким качеством
+        # Используем LANCZOS для лучшего качества масштабирования
+        img_resized = img_pil.resize((target_width_px, target_height_px), Image.Resampling.LANCZOS)
+        
+        # Конвертируем обратно в байты с высоким качеством
         img_bytes_io = io.BytesIO()
-        img_resized.save(img_bytes_io, format='PNG')
+        img_resized.save(img_bytes_io, format='PNG', compress_level=1)  # Минимальное сжатие для качества
         img_bytes = img_bytes_io.getvalue()
         
         # Создаем новую страницу A5
@@ -111,8 +121,8 @@ def convert_pdf_to_a5(input_path, output_path, fit_mode='fit'):
         target_rect = fitz.Rect(
             x_offset,
             y_offset,
-            x_offset + (new_width / zoom),
-            y_offset + (new_height / zoom)
+            x_offset + target_width_pt,
+            y_offset + target_height_pt
         )
         new_page.insert_image(target_rect, stream=img_bytes)
     
@@ -135,11 +145,17 @@ def main():
   %(prog)s input.pdf output.pdf
   %(prog)s input.pdf output.pdf --fit fill
   %(prog)s input.pdf output.pdf --fit stretch
+  %(prog)s input.pdf output.pdf --dpi 300
+  %(prog)s input.pdf output.pdf --dpi 600 --fit fill
 
 Режимы подгонки:
   fit      - вписать содержимое в A5 (сохраняет пропорции, могут быть поля)
   fill     - заполнить весь формат A5 (сохраняет пропорции, может обрезаться)
   stretch  - растянуть содержимое на весь формат A5 (может исказить пропорции)
+
+Качество:
+  --dpi    - разрешение для рендеринга (по умолчанию: 300 DPI)
+             Рекомендуется: 300 DPI для печати, 150-200 DPI для экрана
         """
     )
     
@@ -163,6 +179,13 @@ def main():
         help='Режим подгонки содержимого (по умолчанию: fit)'
     )
     
+    parser.add_argument(
+        '--dpi',
+        type=int,
+        default=300,
+        help='Разрешение для рендеринга в DPI (по умолчанию: 300 для печати)'
+    )
+    
     args = parser.parse_args()
     
     # Проверяем существование входного файла
@@ -180,12 +203,19 @@ def main():
         print(f"Ошибка: выходной файл должен быть PDF: {args.output}", file=sys.stderr)
         sys.exit(1)
     
+    # Проверяем DPI
+    if args.dpi < 72:
+        print(f"Предупреждение: DPI меньше 72 может привести к низкому качеству", file=sys.stderr)
+    if args.dpi > 600:
+        print(f"Предупреждение: DPI больше 600 может привести к очень большим файлам", file=sys.stderr)
+    
     # Обрабатываем файл
     try:
         convert_pdf_to_a5(
             input_path=args.input,
             output_path=args.output,
-            fit_mode=args.fit
+            fit_mode=args.fit,
+            dpi=args.dpi
         )
     except Exception as e:
         print(f"Ошибка при обработке: {e}", file=sys.stderr)

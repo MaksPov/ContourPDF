@@ -91,6 +91,19 @@ python3 convert_to_a5.py input.pdf output.pdf --fit fill
 python3 convert_to_a5.py input.pdf output.pdf --fit stretch
 ```
 
+### Настройка качества
+
+```bash
+# Высокое качество для печати (300 DPI - по умолчанию)
+python3 convert_to_a5.py input.pdf output.pdf --dpi 300
+
+# Максимальное качество (600 DPI - для очень детальных изображений)
+python3 convert_to_a5.py input.pdf output.pdf --dpi 600
+
+# Среднее качество для экрана (150-200 DPI)
+python3 convert_to_a5.py input.pdf output.pdf --dpi 150
+```
+
 ### Параметры convert_to_a5.py
 
 | Параметр | Описание | По умолчанию |
@@ -98,6 +111,7 @@ python3 convert_to_a5.py input.pdf output.pdf --fit stretch
 | `input` | Путь к входному PDF файлу (обязательный) | - |
 | `output` | Путь к выходному PDF файлу (обязательный) | - |
 | `--fit` | Режим подгонки: `fit`, `fill`, `stretch` | `fit` |
+| `--dpi` | Разрешение для рендеринга в DPI | `300` |
 
 ## Параметры командной строки
 
@@ -132,7 +146,11 @@ python3 add_contours.py large_file.pdf output.pdf --workers 16
 ### Конвертация в A5 для печати
 
 ```bash
+# Базовое использование (300 DPI для печати)
 python3 convert_to_a5.py papercraft.pdf papercraft_a5.pdf
+
+# Максимальное качество
+python3 convert_to_a5.py papercraft.pdf papercraft_a5.pdf --dpi 600
 ```
 
 ## Как это работает
@@ -162,7 +180,8 @@ python3 convert_to_a5.py papercraft.pdf papercraft_a5.pdf
 - Работает только с растровыми изображениями в PDF (не с векторной графикой)
 - Контуры добавляются только вокруг цветных фигур (белый фон игнорируется)
 - Зеркалирование применяется ко всем изображениям на странице
-- При конвертации в A5 используется растровый рендеринг для сохранения качества
+- При конвертации в A5 используется растровый рендеринг с настраиваемым разрешением (по умолчанию 300 DPI для печати)
+- Более высокое разрешение (600 DPI) дает лучшее качество, но увеличивает размер файла
 
 ## Лицензия
 
